@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard | RobotBlackBox</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬛</text></svg>">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e5e5e5; }
+      .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 16px; }
+      .spinner { width: 40px; height: 40px; border: 3px solid #262626; border-top-color: #22c55e; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading dashboard...</p>
+      </div>
+    </div>
+    <script>
+      // Configuration - change these for production
+      window.RBB_CONFIG = {
+        // For demo/test mode, use mock backend
+        // For production, point to your Railway/Render backend
+        API_URL: localStorage.getItem('RBB_API_URL') || 'https://roboblackbox-api.up.railway.app',
+        WS_URL: localStorage.getItem('RBB_WS_URL') || 'wss://roboblackbox-api.up.railway.app',
+        // Demo mode uses in-browser mock data
+        DEMO_MODE: !localStorage.getItem('RBB_API_URL')
+      };
+    </script>
+    <script type="module">
+      // Inline React Dashboard for GitHub Pages (no build step needed)
+      import { createElement as h, useState, useEffect, useRef } from 'https://esm.sh/react@18';
+      import { createRoot } from 'https://esm.sh/react-dom@18/client';
+      import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'https://esm.sh/recharts@2';
+
+      const config = window.RBB_CONFIG;
+
+      // Mock data generator for demo mode
+      function createMockData() {
+        const t = Date.now();
+        return {
+          type: 'telemetry',
+          robot_id: 'demo_robot',
+          timestamp: new Date().toISOString(),
+          model_confidence: 0.7 + Math.random() * 0.25 + Math.sin(t / 5000) * 0.1,
+          battery_percent: Math.max(20, 100 - ((t / 1000) % 100) * 0.5),
+          task_phase: ['reaching', 'grasping', 'lifting', 'placing'][Math.floor((t / 3000) % 4)],
+        };
+      }
+
+      // Mock failure generator
+      function maybeCreateFailure() {
+        if (Math.random() > 0.02) return null;
+        const types = [
+          { type: 'sensor', severity: 'high', summary: 'Sensor dropout on joint 3' },
+          { type: 'motor', severity: 'high', summary: 'Motor overload detected on joint 5' },
+          { type: 'model', severity: 'medium', summary: 'AI model confidence dropped to 38%' },
+          { type: 'model', severity: 'critical', summary: 'AI model critically uncertain (22%)' },
+        ];
+        const f = types[Math.floor(Math.random() * types.length)];
+        return {
+          id: Math.random().toString(36).slice(2),
+          failure_type: f.type,
+          severity: f.severity,
+          summary: f.summary,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      function App() {
+        const [mode, setMode] = useState(config.DEMO_MODE ? 'demo' : 'live');
+        const [connected, setConnected] = useState(false);
+        const [robotId, setRobotId] = useState('robot_001');
+        const [telemetry, setTelemetry] = useState([]);
+        const [failures, setFailures] = useState([]);
+        const [sessions, setSessions] = useState([]);
+        const [replay, setReplay] = useState({ data: [], index: 0, playing: false });
+        const ws = useRef(null);
+        const demoInterval = useRef(null);
+
+        // Demo mode - generate mock data
+        useEffect(() => {
+          if (mode !== 'demo') return;
+          setConnected(true);
+          
+          demoInterval.current = setInterval(() => {
+            const data = createMockData();
+            setTelemetry(prev => [...prev, { ...data, time: new Date(data.timestamp).toLocaleTimeString() }].slice(-100));
+            
+            const failure = maybeCreateFailure();
+            if (failure) {
+              setFailures(prev => [failure, ...prev].slice(0, 20));
+            }
+          }, 200);
+
+          // Mock sessions
+          setSessions([
+            { id: 'demo-1', started_at: new Date(Date.now() - 3600000).toISOString(), failure_count: 3 },
+            { id: 'demo-2', started_at: new Date(Date.now() - 7200000).toISOString(), failure_count: 1 },
+            { id: 'demo-3', started_at: new Date(Date.now() - 86400000).toISOString(), failure_count: 7 },
+          ]);
+
+          return () => clearInterval(demoInterval.current);
+        }, [mode]);
+
+        // Live mode - connect to real backend
+        useEffect(() => {
+          if (mode !== 'live') return;
+          
+          const connect = () => {
+            try {
+              ws.current = new WebSocket(`${config.WS_URL}/ws/dashboard`);
+              ws.current.onopen = () => {
+                setConnected(true);
+                ws.current.send(JSON.stringify({ type: 'subscribe', robot_id: robotId }));
+              };
+              ws.current.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'telemetry') {
+                  setTelemetry(prev => [...prev, { ...msg, time: new Date(msg.timestamp).toLocaleTimeString() }].slice(-100));
+                } else if (msg.type === 'failure') {
+                  setFailures(prev => [msg.failure, ...prev].slice(0, 50));
+                }
+              };
+              ws.current.onclose = () => {
+                setConnected(false);
+                setTimeout(connect, 3000);
+              };
+            } catch (e) {
+              console.error('WebSocket error:', e);
+              setTimeout(connect, 3000);
+            }
+          };
+
+          connect();
+          fetchSessions();
+          fetchFailures();
+
+          return () => ws.current?.close();
+        }, [mode, robotId]);
+
+        const fetchSessions = async () => {
+          try {
+            const res = await fetch(`${config.API_URL}/api/sessions?robot_id=${robotId}`);
+            const data = await res.json();
+            setSessions(data.sessions || []);
+          } catch (e) { console.error(e); }
+        };
+
+        const fetchFailures = async () => {
+          try {
+            const res = await fetch(`${config.API_URL}/api/failures?robot_id=${robotId}&limit=20`);
+            const data = await res.json();
+            setFailures(data.failures || []);
+          } catch (e) { console.error(e); }
+        };
+
+        const loadReplay = async (id) => {
+          if (mode === 'demo') {
+            // Generate mock replay data
+            const mockReplay = Array.from({ length: 100 }, (_, i) => ({
+              time: new Date(Date.now() - (100 - i) * 1000).toISOString(),
+              model_confidence: 0.7 + Math.random() * 0.2,
+              task_phase: ['reaching', 'grasping', 'lifting', 'placing'][i % 4],
+              battery_percent: 100 - i * 0.5,
+            }));
+            setReplay({ data: mockReplay, index: 0, playing: false });
+          } else {
+            try {
+              const res = await fetch(`${config.API_URL}/api/sessions/${id}/telemetry`);
+              const data = await res.json();
+              setReplay({ data: data.telemetry || [], index: 0, playing: false });
+            } catch (e) { console.error(e); }
+          }
+        };
+
+        useEffect(() => {
+          if (!replay.playing || replay.index >= replay.data.length - 1) return;
+          const t = setTimeout(() => setReplay(r => ({ ...r, index: r.index + 1 })), 100);
+          return () => clearTimeout(t);
+        }, [replay]);
+
+        const switchMode = (newMode) => {
+          if (ws.current) ws.current.close();
+          if (demoInterval.current) clearInterval(demoInterval.current);
+          setTelemetry([]);
+          setFailures([]);
+          setSessions([]);
+          setReplay({ data: [], index: 0, playing: false });
+          setConnected(false);
+          setMode(newMode);
+        };
+
+        const styles = {
+          container: { minHeight: '100vh', padding: '16px', background: '#0a0a0a' },
+          header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' },
+          logo: { fontSize: '1.5rem', fontWeight: 'bold', color: '#22c55e' },
+          controls: { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' },
+          input: { background: '#18181b', padding: '8px 12px', border: '1px solid #27272a', borderRadius: '6px', color: '#e5e5e5', fontSize: '14px' },
+          badge: { padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' },
+          badgeLive: { background: '#14532d', color: '#22c55e' },
+          badgeDemo: { background: '#1e3a5f', color: '#60a5fa' },
+          badgeDisconnected: { background: '#450a0a', color: '#ef4444' },
+          modeBtn: { padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '12px' },
+          grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' },
+          card: { background: '#18181b', borderRadius: '8px', padding: '16px', border: '1px solid #27272a' },
+          cardTitle: { fontSize: '12px', color: '#71717a', marginBottom: '12px' },
+          failureItem: { fontSize: '13px', borderLeft: '3px solid', paddingLeft: '8px', marginBottom: '12px' },
+          sessionItem: { padding: '8px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginBottom: '4px' },
+          replayControls: { display: 'flex', alignItems: 'center', gap: '12px' },
+          replayBtn: { padding: '6px 16px', background: '#27272a', border: 'none', borderRadius: '4px', color: '#e5e5e5', cursor: 'pointer' },
+          slider: { flex: 1 },
+          replayStats: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '16px' },
+          stat: { fontSize: '13px' },
+          statLabel: { color: '#71717a', marginBottom: '4px' },
+        };
+
+        return h('div', { style: styles.container },
+          h('header', { style: styles.header },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
+              h('span', { style: styles.logo }, '⬛ RobotBlackBox'),
+              h('a', { href: '../', style: { color: '#71717a', fontSize: '13px', textDecoration: 'none' } }, '← Back to home')
+            ),
+            h('div', { style: styles.controls },
+              h('div', { style: { display: 'flex', gap: '4px' } },
+                h('button', {
+                  style: { ...styles.modeBtn, background: mode === 'demo' ? '#22c55e' : '#27272a', color: mode === 'demo' ? '#000' : '#e5e5e5' },
+                  onClick: () => switchMode('demo')
+                }, 'Demo'),
+                h('button', {
+                  style: { ...styles.modeBtn, background: mode === 'live' ? '#22c55e' : '#27272a', color: mode === 'live' ? '#000' : '#e5e5e5' },
+                  onClick: () => switchMode('live')
+                }, 'Live')
+              ),
+              mode === 'live' && h('input', {
+                style: styles.input,
+                value: robotId,
+                onChange: (e) => setRobotId(e.target.value),
+                placeholder: 'robot_id'
+              }),
+              h('span', {
+                style: {
+                  ...styles.badge,
+                  ...(mode === 'demo' ? styles.badgeDemo : (connected ? styles.badgeLive : styles.badgeDisconnected))
+                }
+              }, mode === 'demo' ? 'DEMO' : (connected ? 'LIVE' : 'DISCONNECTED'))
+            )
+          ),
+
+          h('div', { style: styles.grid },
+            // Chart
+            h('div', { style: { ...styles.card, gridColumn: 'span 2' } },
+              h('div', { style: styles.cardTitle }, 'Model Confidence'),
+              h(ResponsiveContainer, { width: '100%', height: 200 },
+                h(LineChart, { data: telemetry },
+                  h(XAxis, { dataKey: 'time', tick: { fill: '#525252', fontSize: 10 } }),
+                  h(YAxis, { domain: [0, 1], tick: { fill: '#525252', fontSize: 10 } }),
+                  h(Tooltip, { contentStyle: { background: '#18181b', border: '1px solid #27272a' } }),
+                  h(Line, { type: 'monotone', dataKey: 'model_confidence', stroke: '#22c55e', dot: false, strokeWidth: 2 })
+                )
+              )
+            ),
+
+            // Failures
+            h('div', { style: { ...styles.card, maxHeight: '280px', overflowY: 'auto' } },
+              h('div', { style: styles.cardTitle }, 'Failures'),
+              failures.length === 0
+                ? h('p', { style: { color: '#525252', fontSize: '13px' } }, 'No failures detected')
+                : failures.map((f, i) =>
+                    h('div', {
+                      key: f.id || i,
+                      style: {
+                        ...styles.failureItem,
+                        borderColor: f.severity === 'critical' ? '#ef4444' : f.severity === 'high' ? '#f97316' : '#eab308'
+                      }
+                    },
+                      h('span', {
+                        style: {
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          background: f.severity === 'critical' ? '#991b1b' : '#92400e',
+                          color: '#fff'
+                        }
+                      }, f.failure_type),
+                      h('p', { style: { color: '#d4d4d4', marginTop: '4px' } }, f.summary),
+                      h('p', { style: { color: '#525252', fontSize: '11px', marginTop: '2px' } },
+                        new Date(f.timestamp).toLocaleTimeString()
+                      )
+                    )
+                  )
+            ),
+
+            // Sessions
+            h('div', { style: styles.card },
+              h('div', { style: styles.cardTitle }, 'Sessions'),
+              h('div', { style: { maxHeight: '150px', overflowY: 'auto' } },
+                sessions.map(s =>
+                  h('div', {
+                    key: s.id,
+                    style: { ...styles.sessionItem, background: '#27272a' },
+                    onClick: () => loadReplay(s.id),
+                    onMouseOver: (e) => e.target.style.background = '#3f3f46',
+                    onMouseOut: (e) => e.target.style.background = '#27272a'
+                  },
+                    h('span', { style: { color: '#d4d4d4' } }, new Date(s.started_at).toLocaleString()),
+                    s.failure_count > 0 && h('span', { style: { color: '#ef4444', marginLeft: '8px' } }, `(${s.failure_count})`)
+                  )
+                )
+              )
+            ),
+
+            // Replay
+            h('div', { style: { ...styles.card, gridColumn: 'span 2' } },
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' } },
+                h('div', { style: styles.cardTitle }, 'Session Replay'),
+                replay.data.length > 0 && h('div', { style: styles.replayControls },
+                  h('button', {
+                    style: styles.replayBtn,
+                    onClick: () => setReplay(r => ({ ...r, playing: !r.playing }))
+                  }, replay.playing ? 'Pause' : 'Play'),
+                  h('input', {
+                    type: 'range',
+                    min: 0,
+                    max: replay.data.length - 1,
+                    value: replay.index,
+                    onChange: (e) => setReplay(r => ({ ...r, index: +e.target.value, playing: false })),
+                    style: { width: '200px' }
+                  }),
+                  h('span', { style: { fontSize: '12px', color: '#71717a' } }, `${replay.index + 1}/${replay.data.length}`)
+                )
+              ),
+              replay.data.length > 0
+                ? h('div', { style: styles.replayStats },
+                    h('div', { style: styles.stat },
+                      h('div', { style: styles.statLabel }, 'Time'),
+                      h('div', null, new Date(replay.data[replay.index]?.time).toLocaleTimeString())
+                    ),
+                    h('div', { style: styles.stat },
+                      h('div', { style: styles.statLabel }, 'Confidence'),
+                      h('div', {
+                        style: { color: replay.data[replay.index]?.model_confidence < 0.5 ? '#ef4444' : '#22c55e' }
+                      }, `${(replay.data[replay.index]?.model_confidence * 100)?.toFixed(1)}%`)
+                    ),
+                    h('div', { style: styles.stat },
+                      h('div', { style: styles.statLabel }, 'Phase'),
+                      h('div', null, replay.data[replay.index]?.task_phase || '-')
+                    )
+                  )
+                : h('p', { style: { color: '#525252', fontSize: '13px' } }, 'Select a session to replay')
+            )
+          ),
+
+          // Footer with config info
+          mode === 'live' && h('div', { style: { marginTop: '24px', padding: '16px', background: '#18181b', borderRadius: '8px', fontSize: '12px', color: '#71717a' } },
+            h('strong', null, 'Connection: '),
+            `API: ${config.API_URL} | WS: ${config.WS_URL}`,
+            h('br'),
+            h('span', null, 'To change, set localStorage: '),
+            h('code', { style: { background: '#27272a', padding: '2px 6px', borderRadius: '3px' } },
+              "localStorage.setItem('RBB_API_URL', 'https://your-backend.com')")
+          )
+        );
+      }
+
+      createRoot(document.getElementById('root')).render(h(App));
+    </script>
+  </body>
+</html>
