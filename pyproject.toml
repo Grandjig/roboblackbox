@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robotblackbox"
+version = "0.1.0"
+description = "Real-time observability agent for robot fleets"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "RobotBlackBox Team"}]
+keywords = ["robotics", "ros2", "observability", "telemetry", "failure-detection"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "websockets>=12.0",
+    "psutil>=5.9.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "typer>=0.9.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+ros2 = []
+dev = ["pytest", "pytest-asyncio", "black", "ruff"]
+
+[project.scripts]
+rbb = "robotblackbox.cli:app"
+robotblackbox = "robotblackbox.cli:app"
+
+[project.urls]
+"Homepage" = "https://github.com/robotblackbox/robotblackbox"
+"Bug Tracker" = "https://github.com/robotblackbox/robotblackbox/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["robotblackbox*"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
