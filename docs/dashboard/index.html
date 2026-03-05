@@ -1,373 +1,334 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | RobotBlackBox</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬛</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬛</text></svg>">
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e5e5e5; }
-      .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 16px; }
-      .spinner { width: 40px; height: 40px; border: 3px solid #262626; border-top-color: #22c55e; border-radius: 50%; animation: spin 1s linear infinite; }
-      @keyframes spin { to { transform: rotate(360deg); } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e5e5e5; min-height: 100vh; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #262626; flex-wrap: wrap; gap: 12px; }
+        .logo { font-size: 1.4rem; font-weight: bold; color: #22c55e; }
+        .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+        .badge-demo { background: #1e3a5f; color: #60a5fa; }
+        .badge-live { background: #14532d; color: #22c55e; }
+        .badge-off { background: #450a0a; color: #ef4444; }
+        .btn { padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .btn-active { background: #22c55e; color: #000; }
+        .btn-inactive { background: #27272a; color: #a1a1aa; }
+        .btn-inactive:hover { background: #3f3f46; }
+        .back-link { color: #71717a; font-size: 13px; text-decoration: none; margin-left: 16px; }
+        .back-link:hover { color: #a1a1aa; }
+        
+        .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; padding: 16px; }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+        
+        .card { background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 16px; }
+        .card-title { font-size: 12px; color: #71717a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .chart-container { position: relative; height: 200px; }
+        #chart { width: 100%; height: 100%; }
+        
+        .failures { max-height: 250px; overflow-y: auto; }
+        .failure-item { border-left: 3px solid; padding: 8px 0 8px 12px; margin-bottom: 12px; }
+        .failure-item.critical { border-color: #ef4444; }
+        .failure-item.high { border-color: #f97316; }
+        .failure-item.medium { border-color: #eab308; }
+        .failure-type { font-size: 10px; padding: 2px 6px; border-radius: 3px; color: #fff; display: inline-block; margin-bottom: 4px; }
+        .failure-type.sensor { background: #991b1b; }
+        .failure-type.motor { background: #92400e; }
+        .failure-type.model { background: #854d0e; }
+        .failure-summary { color: #d4d4d4; font-size: 13px; }
+        .failure-time { color: #525252; font-size: 11px; margin-top: 4px; }
+        .no-data { color: #525252; font-size: 13px; }
+        
+        .sessions { max-height: 180px; overflow-y: auto; }
+        .session-item { padding: 8px 12px; background: #27272a; border-radius: 4px; margin-bottom: 6px; cursor: pointer; font-size: 13px; transition: background 0.2s; }
+        .session-item:hover { background: #3f3f46; }
+        .session-failures { color: #ef4444; margin-left: 8px; }
+        
+        .replay-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .replay-controls button { padding: 6px 16px; background: #27272a; border: none; border-radius: 4px; color: #e5e5e5; cursor: pointer; }
+        .replay-controls button:hover { background: #3f3f46; }
+        .replay-controls input[type="range"] { flex: 1; max-width: 200px; }
+        .replay-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .stat-label { color: #71717a; font-size: 12px; margin-bottom: 4px; }
+        .stat-value { font-size: 14px; }
+        .stat-value.good { color: #22c55e; }
+        .stat-value.bad { color: #ef4444; }
+        
+        .full-width { grid-column: 1 / -1; }
     </style>
-  </head>
-  <body>
-    <div id="root">
-      <div class="loading">
-        <div class="spinner"></div>
-        <p>Loading dashboard...</p>
-      </div>
+</head>
+<body>
+    <header class="header">
+        <div style="display: flex; align-items: center;">
+            <span class="logo">⬛ RobotBlackBox</span>
+            <a href="../" class="back-link">← Back to home</a>
+        </div>
+        <div class="controls">
+            <button id="btn-demo" class="btn btn-active" onclick="switchMode('demo')">Demo</button>
+            <button id="btn-live" class="btn btn-inactive" onclick="switchMode('live')">Live</button>
+            <span id="status" class="badge badge-demo">DEMO</span>
+        </div>
+    </header>
+    
+    <div class="grid">
+        <div class="card">
+            <div class="card-title">Model Confidence (Live)</div>
+            <div class="chart-container">
+                <canvas id="chart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-title">Failure Alerts</div>
+            <div id="failures" class="failures">
+                <p class="no-data">No failures detected</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-title">Sessions</div>
+            <div id="sessions" class="sessions">
+                <div class="session-item" onclick="loadReplay('demo-1')">Today 10:30 AM <span class="session-failures">(3 failures)</span></div>
+                <div class="session-item" onclick="loadReplay('demo-2')">Today 08:15 AM <span class="session-failures">(1 failure)</span></div>
+                <div class="session-item" onclick="loadReplay('demo-3')">Yesterday 04:45 PM <span class="session-failures">(7 failures)</span></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-title">Session Replay</div>
+            <div id="replay-container">
+                <div id="replay-controls" class="replay-controls" style="display: none;">
+                    <button id="replay-btn" onclick="toggleReplay()">Play</button>
+                    <input type="range" id="replay-slider" min="0" max="99" value="0" oninput="seekReplay(this.value)">
+                    <span id="replay-progress">1/100</span>
+                </div>
+                <div id="replay-stats" class="replay-stats" style="display: none;">
+                    <div><div class="stat-label">Time</div><div id="stat-time" class="stat-value">--</div></div>
+                    <div><div class="stat-label">Confidence</div><div id="stat-conf" class="stat-value">--</div></div>
+                    <div><div class="stat-label">Phase</div><div id="stat-phase" class="stat-value">--</div></div>
+                </div>
+                <p id="replay-empty" class="no-data">Select a session to replay</p>
+            </div>
+        </div>
     </div>
+    
     <script>
-      // Configuration - change these for production
-      window.RBB_CONFIG = {
-        // For demo/test mode, use mock backend
-        // For production, point to your Railway/Render backend
-        API_URL: localStorage.getItem('RBB_API_URL') || 'https://roboblackbox-api.up.railway.app',
-        WS_URL: localStorage.getItem('RBB_WS_URL') || 'wss://roboblackbox-api.up.railway.app',
-        // Demo mode uses in-browser mock data
-        DEMO_MODE: !localStorage.getItem('RBB_API_URL')
-      };
-    </script>
-    <script type="module">
-      // Inline React Dashboard for GitHub Pages (no build step needed)
-      import { createElement as h, useState, useEffect, useRef } from 'https://esm.sh/react@18';
-      import { createRoot } from 'https://esm.sh/react-dom@18/client';
-      import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'https://esm.sh/recharts@2';
-
-      const config = window.RBB_CONFIG;
-
-      // Mock data generator for demo mode
-      function createMockData() {
-        const t = Date.now();
-        return {
-          type: 'telemetry',
-          robot_id: 'demo_robot',
-          timestamp: new Date().toISOString(),
-          model_confidence: 0.7 + Math.random() * 0.25 + Math.sin(t / 5000) * 0.1,
-          battery_percent: Math.max(20, 100 - ((t / 1000) % 100) * 0.5),
-          task_phase: ['reaching', 'grasping', 'lifting', 'placing'][Math.floor((t / 3000) % 4)],
-        };
-      }
-
-      // Mock failure generator
-      function maybeCreateFailure() {
-        if (Math.random() > 0.02) return null;
-        const types = [
-          { type: 'sensor', severity: 'high', summary: 'Sensor dropout on joint 3' },
-          { type: 'motor', severity: 'high', summary: 'Motor overload detected on joint 5' },
-          { type: 'model', severity: 'medium', summary: 'AI model confidence dropped to 38%' },
-          { type: 'model', severity: 'critical', summary: 'AI model critically uncertain (22%)' },
-        ];
-        const f = types[Math.floor(Math.random() * types.length)];
-        return {
-          id: Math.random().toString(36).slice(2),
-          failure_type: f.type,
-          severity: f.severity,
-          summary: f.summary,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      function App() {
-        const [mode, setMode] = useState(config.DEMO_MODE ? 'demo' : 'live');
-        const [connected, setConnected] = useState(false);
-        const [robotId, setRobotId] = useState('robot_001');
-        const [telemetry, setTelemetry] = useState([]);
-        const [failures, setFailures] = useState([]);
-        const [sessions, setSessions] = useState([]);
-        const [replay, setReplay] = useState({ data: [], index: 0, playing: false });
-        const ws = useRef(null);
-        const demoInterval = useRef(null);
-
-        // Demo mode - generate mock data
-        useEffect(() => {
-          if (mode !== 'demo') return;
-          setConnected(true);
-          
-          demoInterval.current = setInterval(() => {
-            const data = createMockData();
-            setTelemetry(prev => [...prev, { ...data, time: new Date(data.timestamp).toLocaleTimeString() }].slice(-100));
+        // State
+        let mode = 'demo';
+        let telemetryData = [];
+        let failures = [];
+        let replayData = [];
+        let replayIndex = 0;
+        let isReplaying = false;
+        let demoInterval = null;
+        let replayInterval = null;
+        let chartCtx = null;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            chartCtx = document.getElementById('chart').getContext('2d');
+            resizeChart();
+            window.addEventListener('resize', resizeChart);
+            startDemo();
+        });
+        
+        function resizeChart() {
+            const canvas = document.getElementById('chart');
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            drawChart();
+        }
+        
+        function switchMode(newMode) {
+            mode = newMode;
+            document.getElementById('btn-demo').className = mode === 'demo' ? 'btn btn-active' : 'btn btn-inactive';
+            document.getElementById('btn-live').className = mode === 'live' ? 'btn btn-active' : 'btn btn-inactive';
+            document.getElementById('status').className = mode === 'demo' ? 'badge badge-demo' : 'badge badge-off';
+            document.getElementById('status').textContent = mode === 'demo' ? 'DEMO' : 'DISCONNECTED';
             
-            const failure = maybeCreateFailure();
-            if (failure) {
-              setFailures(prev => [failure, ...prev].slice(0, 20));
+            if (mode === 'demo') {
+                startDemo();
+            } else {
+                stopDemo();
+                telemetryData = [];
+                failures = [];
+                drawChart();
+                renderFailures();
             }
-          }, 200);
-
-          // Mock sessions
-          setSessions([
-            { id: 'demo-1', started_at: new Date(Date.now() - 3600000).toISOString(), failure_count: 3 },
-            { id: 'demo-2', started_at: new Date(Date.now() - 7200000).toISOString(), failure_count: 1 },
-            { id: 'demo-3', started_at: new Date(Date.now() - 86400000).toISOString(), failure_count: 7 },
-          ]);
-
-          return () => clearInterval(demoInterval.current);
-        }, [mode]);
-
-        // Live mode - connect to real backend
-        useEffect(() => {
-          if (mode !== 'live') return;
-          
-          const connect = () => {
-            try {
-              ws.current = new WebSocket(`${config.WS_URL}/ws/dashboard`);
-              ws.current.onopen = () => {
-                setConnected(true);
-                ws.current.send(JSON.stringify({ type: 'subscribe', robot_id: robotId }));
-              };
-              ws.current.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'telemetry') {
-                  setTelemetry(prev => [...prev, { ...msg, time: new Date(msg.timestamp).toLocaleTimeString() }].slice(-100));
-                } else if (msg.type === 'failure') {
-                  setFailures(prev => [msg.failure, ...prev].slice(0, 50));
+        }
+        
+        function startDemo() {
+            if (demoInterval) return;
+            demoInterval = setInterval(() => {
+                const now = Date.now();
+                const confidence = 0.7 + Math.random() * 0.25 + Math.sin(now / 5000) * 0.1;
+                telemetryData.push({ time: now, confidence: Math.min(1, Math.max(0, confidence)) });
+                if (telemetryData.length > 100) telemetryData.shift();
+                
+                // Random failures
+                if (Math.random() < 0.02) {
+                    const types = [
+                        { type: 'sensor', severity: 'high', summary: 'Sensor dropout on joint 3' },
+                        { type: 'motor', severity: 'high', summary: 'Motor overload on joint 5' },
+                        { type: 'model', severity: 'medium', summary: 'AI confidence dropped to 38%' },
+                        { type: 'model', severity: 'critical', summary: 'AI critically uncertain (22%)' },
+                    ];
+                    const f = types[Math.floor(Math.random() * types.length)];
+                    failures.unshift({ ...f, time: now });
+                    if (failures.length > 20) failures.pop();
+                    renderFailures();
                 }
-              };
-              ws.current.onclose = () => {
-                setConnected(false);
-                setTimeout(connect, 3000);
-              };
-            } catch (e) {
-              console.error('WebSocket error:', e);
-              setTimeout(connect, 3000);
+                
+                drawChart();
+            }, 200);
+        }
+        
+        function stopDemo() {
+            if (demoInterval) {
+                clearInterval(demoInterval);
+                demoInterval = null;
             }
-          };
-
-          connect();
-          fetchSessions();
-          fetchFailures();
-
-          return () => ws.current?.close();
-        }, [mode, robotId]);
-
-        const fetchSessions = async () => {
-          try {
-            const res = await fetch(`${config.API_URL}/api/sessions?robot_id=${robotId}`);
-            const data = await res.json();
-            setSessions(data.sessions || []);
-          } catch (e) { console.error(e); }
-        };
-
-        const fetchFailures = async () => {
-          try {
-            const res = await fetch(`${config.API_URL}/api/failures?robot_id=${robotId}&limit=20`);
-            const data = await res.json();
-            setFailures(data.failures || []);
-          } catch (e) { console.error(e); }
-        };
-
-        const loadReplay = async (id) => {
-          if (mode === 'demo') {
+        }
+        
+        function drawChart() {
+            const canvas = document.getElementById('chart');
+            const ctx = chartCtx;
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.fillStyle = '#18181b';
+            ctx.fillRect(0, 0, w, h);
+            
+            // Grid lines
+            ctx.strokeStyle = '#27272a';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = h - (i / 4) * h;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#525252';
+                ctx.font = '10px system-ui';
+                ctx.fillText((i * 25) + '%', 4, y - 4);
+            }
+            
+            if (telemetryData.length < 2) return;
+            
+            // Draw line
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const step = w / (telemetryData.length - 1);
+            telemetryData.forEach((d, i) => {
+                const x = i * step;
+                const y = h - (d.confidence * h);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            
+            // Glow effect
+            ctx.strokeStyle = 'rgba(34, 197, 94, 0.3)';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            telemetryData.forEach((d, i) => {
+                const x = i * step;
+                const y = h - (d.confidence * h);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+        
+        function renderFailures() {
+            const container = document.getElementById('failures');
+            if (failures.length === 0) {
+                container.innerHTML = '<p class="no-data">No failures detected</p>';
+                return;
+            }
+            container.innerHTML = failures.map(f => `
+                <div class="failure-item ${f.severity}">
+                    <span class="failure-type ${f.type}">${f.type}</span>
+                    <div class="failure-summary">${f.summary}</div>
+                    <div class="failure-time">${new Date(f.time).toLocaleTimeString()}</div>
+                </div>
+            `).join('');
+        }
+        
+        function loadReplay(sessionId) {
             // Generate mock replay data
-            const mockReplay = Array.from({ length: 100 }, (_, i) => ({
-              time: new Date(Date.now() - (100 - i) * 1000).toISOString(),
-              model_confidence: 0.7 + Math.random() * 0.2,
-              task_phase: ['reaching', 'grasping', 'lifting', 'placing'][i % 4],
-              battery_percent: 100 - i * 0.5,
-            }));
-            setReplay({ data: mockReplay, index: 0, playing: false });
-          } else {
-            try {
-              const res = await fetch(`${config.API_URL}/api/sessions/${id}/telemetry`);
-              const data = await res.json();
-              setReplay({ data: data.telemetry || [], index: 0, playing: false });
-            } catch (e) { console.error(e); }
-          }
-        };
-
-        useEffect(() => {
-          if (!replay.playing || replay.index >= replay.data.length - 1) return;
-          const t = setTimeout(() => setReplay(r => ({ ...r, index: r.index + 1 })), 100);
-          return () => clearTimeout(t);
-        }, [replay]);
-
-        const switchMode = (newMode) => {
-          if (ws.current) ws.current.close();
-          if (demoInterval.current) clearInterval(demoInterval.current);
-          setTelemetry([]);
-          setFailures([]);
-          setSessions([]);
-          setReplay({ data: [], index: 0, playing: false });
-          setConnected(false);
-          setMode(newMode);
-        };
-
-        const styles = {
-          container: { minHeight: '100vh', padding: '16px', background: '#0a0a0a' },
-          header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' },
-          logo: { fontSize: '1.5rem', fontWeight: 'bold', color: '#22c55e' },
-          controls: { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' },
-          input: { background: '#18181b', padding: '8px 12px', border: '1px solid #27272a', borderRadius: '6px', color: '#e5e5e5', fontSize: '14px' },
-          badge: { padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' },
-          badgeLive: { background: '#14532d', color: '#22c55e' },
-          badgeDemo: { background: '#1e3a5f', color: '#60a5fa' },
-          badgeDisconnected: { background: '#450a0a', color: '#ef4444' },
-          modeBtn: { padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '12px' },
-          grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' },
-          card: { background: '#18181b', borderRadius: '8px', padding: '16px', border: '1px solid #27272a' },
-          cardTitle: { fontSize: '12px', color: '#71717a', marginBottom: '12px' },
-          failureItem: { fontSize: '13px', borderLeft: '3px solid', paddingLeft: '8px', marginBottom: '12px' },
-          sessionItem: { padding: '8px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', marginBottom: '4px' },
-          replayControls: { display: 'flex', alignItems: 'center', gap: '12px' },
-          replayBtn: { padding: '6px 16px', background: '#27272a', border: 'none', borderRadius: '4px', color: '#e5e5e5', cursor: 'pointer' },
-          slider: { flex: 1 },
-          replayStats: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '16px' },
-          stat: { fontSize: '13px' },
-          statLabel: { color: '#71717a', marginBottom: '4px' },
-        };
-
-        return h('div', { style: styles.container },
-          h('header', { style: styles.header },
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
-              h('span', { style: styles.logo }, '⬛ RobotBlackBox'),
-              h('a', { href: '../', style: { color: '#71717a', fontSize: '13px', textDecoration: 'none' } }, '← Back to home')
-            ),
-            h('div', { style: styles.controls },
-              h('div', { style: { display: 'flex', gap: '4px' } },
-                h('button', {
-                  style: { ...styles.modeBtn, background: mode === 'demo' ? '#22c55e' : '#27272a', color: mode === 'demo' ? '#000' : '#e5e5e5' },
-                  onClick: () => switchMode('demo')
-                }, 'Demo'),
-                h('button', {
-                  style: { ...styles.modeBtn, background: mode === 'live' ? '#22c55e' : '#27272a', color: mode === 'live' ? '#000' : '#e5e5e5' },
-                  onClick: () => switchMode('live')
-                }, 'Live')
-              ),
-              mode === 'live' && h('input', {
-                style: styles.input,
-                value: robotId,
-                onChange: (e) => setRobotId(e.target.value),
-                placeholder: 'robot_id'
-              }),
-              h('span', {
-                style: {
-                  ...styles.badge,
-                  ...(mode === 'demo' ? styles.badgeDemo : (connected ? styles.badgeLive : styles.badgeDisconnected))
-                }
-              }, mode === 'demo' ? 'DEMO' : (connected ? 'LIVE' : 'DISCONNECTED'))
-            )
-          ),
-
-          h('div', { style: styles.grid },
-            // Chart
-            h('div', { style: { ...styles.card, gridColumn: 'span 2' } },
-              h('div', { style: styles.cardTitle }, 'Model Confidence'),
-              h(ResponsiveContainer, { width: '100%', height: 200 },
-                h(LineChart, { data: telemetry },
-                  h(XAxis, { dataKey: 'time', tick: { fill: '#525252', fontSize: 10 } }),
-                  h(YAxis, { domain: [0, 1], tick: { fill: '#525252', fontSize: 10 } }),
-                  h(Tooltip, { contentStyle: { background: '#18181b', border: '1px solid #27272a' } }),
-                  h(Line, { type: 'monotone', dataKey: 'model_confidence', stroke: '#22c55e', dot: false, strokeWidth: 2 })
-                )
-              )
-            ),
-
-            // Failures
-            h('div', { style: { ...styles.card, maxHeight: '280px', overflowY: 'auto' } },
-              h('div', { style: styles.cardTitle }, 'Failures'),
-              failures.length === 0
-                ? h('p', { style: { color: '#525252', fontSize: '13px' } }, 'No failures detected')
-                : failures.map((f, i) =>
-                    h('div', {
-                      key: f.id || i,
-                      style: {
-                        ...styles.failureItem,
-                        borderColor: f.severity === 'critical' ? '#ef4444' : f.severity === 'high' ? '#f97316' : '#eab308'
-                      }
-                    },
-                      h('span', {
-                        style: {
-                          fontSize: '10px',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          background: f.severity === 'critical' ? '#991b1b' : '#92400e',
-                          color: '#fff'
-                        }
-                      }, f.failure_type),
-                      h('p', { style: { color: '#d4d4d4', marginTop: '4px' } }, f.summary),
-                      h('p', { style: { color: '#525252', fontSize: '11px', marginTop: '2px' } },
-                        new Date(f.timestamp).toLocaleTimeString()
-                      )
-                    )
-                  )
-            ),
-
-            // Sessions
-            h('div', { style: styles.card },
-              h('div', { style: styles.cardTitle }, 'Sessions'),
-              h('div', { style: { maxHeight: '150px', overflowY: 'auto' } },
-                sessions.map(s =>
-                  h('div', {
-                    key: s.id,
-                    style: { ...styles.sessionItem, background: '#27272a' },
-                    onClick: () => loadReplay(s.id),
-                    onMouseOver: (e) => e.target.style.background = '#3f3f46',
-                    onMouseOut: (e) => e.target.style.background = '#27272a'
-                  },
-                    h('span', { style: { color: '#d4d4d4' } }, new Date(s.started_at).toLocaleString()),
-                    s.failure_count > 0 && h('span', { style: { color: '#ef4444', marginLeft: '8px' } }, `(${s.failure_count})`)
-                  )
-                )
-              )
-            ),
-
-            // Replay
-            h('div', { style: { ...styles.card, gridColumn: 'span 2' } },
-              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' } },
-                h('div', { style: styles.cardTitle }, 'Session Replay'),
-                replay.data.length > 0 && h('div', { style: styles.replayControls },
-                  h('button', {
-                    style: styles.replayBtn,
-                    onClick: () => setReplay(r => ({ ...r, playing: !r.playing }))
-                  }, replay.playing ? 'Pause' : 'Play'),
-                  h('input', {
-                    type: 'range',
-                    min: 0,
-                    max: replay.data.length - 1,
-                    value: replay.index,
-                    onChange: (e) => setReplay(r => ({ ...r, index: +e.target.value, playing: false })),
-                    style: { width: '200px' }
-                  }),
-                  h('span', { style: { fontSize: '12px', color: '#71717a' } }, `${replay.index + 1}/${replay.data.length}`)
-                )
-              ),
-              replay.data.length > 0
-                ? h('div', { style: styles.replayStats },
-                    h('div', { style: styles.stat },
-                      h('div', { style: styles.statLabel }, 'Time'),
-                      h('div', null, new Date(replay.data[replay.index]?.time).toLocaleTimeString())
-                    ),
-                    h('div', { style: styles.stat },
-                      h('div', { style: styles.statLabel }, 'Confidence'),
-                      h('div', {
-                        style: { color: replay.data[replay.index]?.model_confidence < 0.5 ? '#ef4444' : '#22c55e' }
-                      }, `${(replay.data[replay.index]?.model_confidence * 100)?.toFixed(1)}%`)
-                    ),
-                    h('div', { style: styles.stat },
-                      h('div', { style: styles.statLabel }, 'Phase'),
-                      h('div', null, replay.data[replay.index]?.task_phase || '-')
-                    )
-                  )
-                : h('p', { style: { color: '#525252', fontSize: '13px' } }, 'Select a session to replay')
-            )
-          ),
-
-          // Footer with config info
-          mode === 'live' && h('div', { style: { marginTop: '24px', padding: '16px', background: '#18181b', borderRadius: '8px', fontSize: '12px', color: '#71717a' } },
-            h('strong', null, 'Connection: '),
-            `API: ${config.API_URL} | WS: ${config.WS_URL}`,
-            h('br'),
-            h('span', null, 'To change, set localStorage: '),
-            h('code', { style: { background: '#27272a', padding: '2px 6px', borderRadius: '3px' } },
-              "localStorage.setItem('RBB_API_URL', 'https://your-backend.com')")
-          )
-        );
-      }
-
-      createRoot(document.getElementById('root')).render(h(App));
+            replayData = [];
+            const phases = ['reaching', 'grasping', 'lifting', 'placing'];
+            for (let i = 0; i < 100; i++) {
+                replayData.push({
+                    time: Date.now() - (100 - i) * 1000,
+                    confidence: 0.6 + Math.random() * 0.35,
+                    phase: phases[i % 4],
+                });
+            }
+            replayIndex = 0;
+            isReplaying = false;
+            
+            document.getElementById('replay-empty').style.display = 'none';
+            document.getElementById('replay-controls').style.display = 'flex';
+            document.getElementById('replay-stats').style.display = 'grid';
+            document.getElementById('replay-slider').max = replayData.length - 1;
+            
+            updateReplayDisplay();
+        }
+        
+        function toggleReplay() {
+            isReplaying = !isReplaying;
+            document.getElementById('replay-btn').textContent = isReplaying ? 'Pause' : 'Play';
+            
+            if (isReplaying) {
+                replayInterval = setInterval(() => {
+                    replayIndex++;
+                    if (replayIndex >= replayData.length) {
+                        replayIndex = replayData.length - 1;
+                        isReplaying = false;
+                        document.getElementById('replay-btn').textContent = 'Play';
+                        clearInterval(replayInterval);
+                    }
+                    updateReplayDisplay();
+                }, 100);
+            } else if (replayInterval) {
+                clearInterval(replayInterval);
+            }
+        }
+        
+        function seekReplay(value) {
+            replayIndex = parseInt(value);
+            isReplaying = false;
+            document.getElementById('replay-btn').textContent = 'Play';
+            if (replayInterval) clearInterval(replayInterval);
+            updateReplayDisplay();
+        }
+        
+        function updateReplayDisplay() {
+            const d = replayData[replayIndex];
+            if (!d) return;
+            
+            document.getElementById('replay-slider').value = replayIndex;
+            document.getElementById('replay-progress').textContent = `${replayIndex + 1}/${replayData.length}`;
+            document.getElementById('stat-time').textContent = new Date(d.time).toLocaleTimeString();
+            
+            const confEl = document.getElementById('stat-conf');
+            confEl.textContent = (d.confidence * 100).toFixed(1) + '%';
+            confEl.className = d.confidence < 0.5 ? 'stat-value bad' : 'stat-value good';
+            
+            document.getElementById('stat-phase').textContent = d.phase;
+        }
     </script>
-  </body>
+</body>
 </html>
